@@ -51,7 +51,7 @@ def get_code_level(filename):
         return CodeLevel.BUILDER
     elif 'common' in file_dir:
         return CodeLevel.COMMON
-    elif 'scripts' or 'CMakeLists.txt' or 'yaml' in file_dir:
+    elif any(item in filename for item in DEFAULT_SCRIPT_CODE_LEVEL_FILE) or os.path.splitext(filename)[1] in DEFAULT_SCRIPT_CODE_LEVEL_FILE:
         return CodeLevel.SCRIPT
     else:
         return CodeLevel.DEFAULT
@@ -103,8 +103,6 @@ def get_file_commits(owner, repo, sha, file_path):
     try:
         response = send_request(url, headers)
         if response.status_code == 200:
-            # stop a little time to provide time to GitHub
-            time.sleep(SLEEP_TIME)
             return response.json()
         else:
             logging.error(f"Error fetching commit history for {file_path} and branch {sha}\n Error url: {url}")
@@ -124,8 +122,6 @@ def get_file_content(owner, repo, file_path, sha):
     try:
         response = send_request(url, headers)
         if response.status_code == 200:
-            # stop a little time to provide time to GitHub
-            time.sleep(SLEEP_TIME)
             return response.text
         else:
             logging.error(f"Error fetching file content for {file_path}: {response.status_code}, {response.text}\n Error url: {url}")
@@ -344,8 +340,9 @@ def calculate_pr_workload(changes):
         file_content = change['file_content']
 
         changedLine += additions + deletions
-        if not os.path.splitext(filename)[1] in DEFAULT_CPP_ENDS_WITH_FILE and not os.path.splitext(filename)[1] in DEFAULT_PYTHON_ENDS_WITH_FILE:
-            workload += (additions + deletions) * DEFAULT_NOT_ANALYSE_COMPLEXITY * 1 * 0.01
+        if not os.path.splitext(filename)[1] in DEFAULT_CPP_ENDS_WITH_FILE \
+                and not os.path.splitext(filename)[1] in DEFAULT_PYTHON_ENDS_WITH_FILE:
+            workload += (additions + deletions) * DEFAULT_NOT_ANALYSE_COMPLEXITY * code_level * 0.01
             continue
 
         if not file_content :
@@ -373,30 +370,32 @@ def main():
     parser.add_argument('--verbose', type=int, choices=[0, 1, 2], default=1,
                         help='Set verbosity level: 0=critical, 1=info, 2=error (default: 1)')
     parser.add_argument("--default-code-level", type=int, default=1, help="Default code level")
+    parser.add_argument("--default-script-code-level-file", default=".yaml,CMakeLists.txt", help="Default script code level file")
     parser.add_argument("--default-not-analyse-complexity", type=int, default=1, help="Default not analyse complexity")
     parser.add_argument("--default-cpp-ends-with-file", default=".cpp,.h,.hpp,.m,.mm,.cc",
                         help="Default C++ ends with file")
     parser.add_argument("--default-python-ends-with-file", default=".py,", help="Default Python ends with file")
     parser.add_argument("--api-base-url", default="https://api.github.com", help="API base URL")
-    parser.add_argument("--sleep-time", type=int, default=0, help="Sleep time between requests")
+
 
     args = parser.parse_args()
 
     setup_logging(args.verbose)
 
     global  GITHUB_TOKEN, OWNER, REPO, PR_NUMBER, \
-        DEFAULT_CODE_LEVEL, DEFAULT_NOT_ANALYSE_COMPLEXITY, DEFAULT_CPP_ENDS_WITH_FILE, DEFAULT_PYTHON_ENDS_WITH_FILE,\
-        API_BASE_URL,SLEEP_TIME
+        DEFAULT_CODE_LEVEL,DEFAULT_SCRIPT_CODE_LEVEL_FILE ,\
+        DEFAULT_NOT_ANALYSE_COMPLEXITY, DEFAULT_CPP_ENDS_WITH_FILE, DEFAULT_PYTHON_ENDS_WITH_FILE,\
+        API_BASE_URL
     GITHUB_TOKEN = args.token
     OWNER = args.owner
     REPO = args.repo
     PR_NUMBER = args.pr_number
     DEFAULT_CODE_LEVEL = args.default_code_level
+    DEFAULT_SCRIPT_CODE_LEVEL_FILE = args.default_script_code_level_file.split(',')
     DEFAULT_NOT_ANALYSE_COMPLEXITY = args.default_not_analyse_complexity
     DEFAULT_CPP_ENDS_WITH_FILE =  args.default_cpp_ends_with_file.split(',')
     DEFAULT_PYTHON_ENDS_WITH_FILE = args.default_python_ends_with_file.split(',')
     API_BASE_URL = args.api_base_url
-    SLEEP_TIME = args.sleep_time
 
     # Get the files of the PR
     files = get_pr_files(OWNER, REPO, PR_NUMBER)
