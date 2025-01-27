@@ -38,4 +38,4 @@ build/
 .DS_Store
 
 ## secret ##
-./src/main/resouces/application-prod.yml
+src/main/resources/application-prod.yml
